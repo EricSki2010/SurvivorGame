@@ -1,0 +1,3 @@
+E:/Code/eric/2D_survivalGame/build_msvc/CMakeFiles/game.dir
+E:/Code/eric/2D_survivalGame/build_msvc/CMakeFiles/edit_cache.dir
+E:/Code/eric/2D_survivalGame/build_msvc/CMakeFiles/rebuild_cache.dir
