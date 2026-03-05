@@ -1,0 +1,8 @@
+[
+    { "objectId": 2, "tileId": 5,  "weight": 1  },
+    { "objectId": 1, "tileId": 5,  "weight": 3  },
+    { "objectId": 2, "tileId": 8,  "weight": 20 },
+    { "objectId": 1, "tileId": 8,  "weight": 7  },
+    { "objectId": 2, "tileId": 9,  "weight": 30 },
+    { "objectId": 1, "tileId": 9,  "weight": 10 }
+]

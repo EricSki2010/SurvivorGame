@@ -3,24 +3,9 @@
 
 enum ObjectType {
     OBJECT_NONE = 0,
-    OBJECT_ROCK,
-    OBJECT_TREE,
-    OBJECT_COUNT
+    OBJECT_ROCK = 1,
+    OBJECT_TREE = 2,
 };
-
-// Collision box size for each object type (width, height) — {0,0} means no collision
-inline const Vector2 OBJECT_COLLISION_SIZE[OBJECT_COUNT] = {
-    {0, 0},       // OBJECT_NONE
-    {14, 12},     // OBJECT_ROCK
-    {11, 12},     // OBJECT_TREE
-};
-
-// Max random offset: floor(16 - collisionWidth/2), keeps collision inside the tile
-inline int getSpawnJitter(int objId) {
-    Vector2 col = OBJECT_COLLISION_SIZE[objId];
-    if (col.x == 0 && col.y == 0) return 0;
-    return (int)(16.0f - col.x / 2.0f);
-}
 
 enum TileType {
     TILE_DEEP_WATER = 0,
@@ -74,37 +59,26 @@ inline const Color TILE_COLORS[TILE_COUNT] = {
     {220, 230, 240, 255},  // snowy peak
 };
 
+// Precomputed water decoration piece (edge, corner, or inner corner)
+struct WaterDeco {
+    int pieceId = -1;      // index into World::waterPieces (-1 = none)
+    int variant = 0;       // which variant frame from the sprite sheet
+    float rotation = 0.0f; // rotation in degrees
+    float offX = 0.0f;     // x offset within tile (0 or 16 for 16x16 pieces)
+    float offY = 0.0f;     // y offset within tile (0 or 16 for 16x16 pieces)
+};
+
 struct Tile {
     int id = TILE_GRASS;
     int objectId = OBJECT_NONE;
     float offsetX = 0.0f; // random placement offset within tile
     float offsetY = 0.0f;
+    // Precomputed water edge/corner decorations (filled during chunk generation)
+    // Each water tile has a 2x2 slot grid: NW(0,0), NE(1,0), SW(0,1), SE(1,1)
+    // Pieces fill slots to prevent overlaps: turns fill 3, flats fill 2, inner corners fill 1
+    WaterDeco waterDecos[4] = {};
+    int waterDecoCount = 0;
 };
-
-// Object spawn rules: { objectType, tileType, weight }
-// For each tile, matching rules are collected and weights summed.
-// A roll 0-99 picks: if roll < total weight, pick from the weighted list. Otherwise no object.
-struct SpawnRule {
-    int objectId;
-    int tileId;
-    int weight; // out of 100
-};
-
-inline const SpawnRule SPAWN_RULES[] = {
-    // Grass
-    { OBJECT_TREE, TILE_GRASS,        1 },
-    { OBJECT_ROCK, TILE_GRASS,        3 },
-
-    // Forest
-    { OBJECT_TREE, TILE_FOREST,       20 },
-    { OBJECT_ROCK, TILE_FOREST,       7 },
-
-    // Dense Forest
-    { OBJECT_TREE, TILE_DENSE_FOREST, 30 },
-    { OBJECT_ROCK, TILE_DENSE_FOREST, 10 },
-};
-
-inline const int SPAWN_RULE_COUNT = sizeof(SPAWN_RULES) / sizeof(SPAWN_RULES[0]);
 
 // Returns true if a tile blocks movement
 // Nothing is solid yet — flip individual checks here as needed

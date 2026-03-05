@@ -1,0 +1,8 @@
+[
+    {
+        "objectId": 2,
+        "drops": [
+            { "itemId": 0, "min": 1, "max": 3, "weight": 100 }
+        ]
+    }
+]

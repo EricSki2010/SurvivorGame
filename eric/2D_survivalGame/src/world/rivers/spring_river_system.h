@@ -2,6 +2,7 @@
 #include "FastNoiseLite.h"
 #include <vector>
 #include <unordered_map>
+#include <shared_mutex>
 #include <cstdint>
 
 const int RIVER_REGION_SIZE = 512;      // tiles per region axis
@@ -31,9 +32,14 @@ private:
         std::vector<int> flow;
     };
 
+    mutable std::shared_mutex regionMutex;
     std::unordered_map<int64_t, Region> regions;
 
     int64_t regionKey(int rx, int ry) const {
         return ((int64_t)rx << 32) | (uint32_t)ry;
     }
+
+    // Shared lookup: returns region pointer and local index, or nullptr if ungenerated.
+    // Caller must hold regionMutex.
+    const Region* findRegionTile(int worldTileX, int worldTileY, int& index) const;
 };

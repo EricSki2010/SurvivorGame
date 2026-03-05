@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Graph</title>
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background: #1a1a2e;
+        }
+        canvas {
+            background: #0f0f23;
+            border: 1px solid #333;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="graph" width="600" height="600"></canvas>
+    <script>
+        const canvas = document.getElementById('graph');
+        const ctx = canvas.getContext('2d');
+        const W = canvas.width;
+        const H = canvas.height;
+        const padding = 40;
+
+        const minVal = -10;
+        const maxVal = 10;
+        const range = maxVal - minVal;
+
+        function toX(val) { return padding + ((val - minVal) / range) * (W - 2 * padding); }
+        function toY(val) { return H - padding - ((val - minVal) / range) * (H - 2 * padding); }
+
+        function drawGrid() {
+            ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+            ctx.lineWidth = 1;
+            for (let i = minVal; i <= maxVal; i++) {
+                ctx.beginPath();
+                ctx.moveTo(toX(i), toY(minVal));
+                ctx.lineTo(toX(i), toY(maxVal));
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(toX(minVal), toY(i));
+                ctx.lineTo(toX(maxVal), toY(i));
+                ctx.stroke();
+            }
+        }
+
+        function drawAxes() {
+            ctx.strokeStyle = '#ccc';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(toX(minVal), toY(0));
+            ctx.lineTo(toX(maxVal), toY(0));
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(toX(0), toY(minVal));
+            ctx.lineTo(toX(0), toY(maxVal));
+            ctx.stroke();
+
+            ctx.fillStyle = '#ccc';
+            ctx.font = '11px monospace';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            for (let i = minVal; i <= maxVal; i++) {
+                if (i === 0) continue;
+                ctx.beginPath();
+                ctx.moveTo(toX(i), toY(0) - 4);
+                ctx.lineTo(toX(i), toY(0) + 4);
+                ctx.stroke();
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'top';
+                ctx.fillText(i, toX(i), toY(0) + 6);
+                ctx.beginPath();
+                ctx.moveTo(toX(0) - 4, toY(i));
+                ctx.lineTo(toX(0) + 4, toY(i));
+                ctx.stroke();
+                ctx.textAlign = 'right';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(i, toX(0) - 8, toY(i));
+            }
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'top';
+            ctx.fillText('0', toX(0) - 6, toY(0) + 6);
+        }
+
+        function heatColor(t) {
+            // t is 0..1 (low..high). Blue -> Cyan -> Green -> Yellow -> Red
+            t = Math.max(0, Math.min(1, t));
+            let r, g, b;
+            if (t < 0.25)      { const s = t / 0.25;       r = 0;             g = Math.round(255 * s); b = 255; }
+            else if (t < 0.5)  { const s = (t - 0.25) / 0.25; r = 0;          g = 255;                 b = Math.round(255 * (1 - s)); }
+            else if (t < 0.75) { const s = (t - 0.5) / 0.25;  r = Math.round(255 * s); g = 255;        b = 0; }
+            else               { const s = (t - 0.75) / 0.25; r = 255;        g = Math.round(255 * (1 - s)); b = 0; }
+            return `rgb(${r},${g},${b})`;
+        }
+
+        function drawHeatmap(fn) {
+            const graphW = W - 2 * padding;
+            const graphH = H - 2 * padding;
+            const step = 2; // pixel step size for performance
+            // First pass: compute all values to find min/max
+            const values = [];
+            for (let py = 0; py < graphH; py += step) {
+                for (let px = 0; px < graphW; px += step) {
+                    const x = minVal + (px / graphW) * range;
+                    const y = maxVal - (py / graphH) * range;
+                    const val = fn(x, y);
+                    values.push({ px, py, val });
+                }
+            }
+            const vals = values.map(v => v.val);
+            const lo = Math.min(...vals);
+            const hi = Math.max(...vals);
+            // Use log scale for better contrast
+            const logLo = Math.log(1 + lo);
+            const logHi = Math.log(1 + hi);
+            // Second pass: draw
+            for (const { px, py, val } of values) {
+                const t = logHi > logLo ? (Math.log(1 + val) - logLo) / (logHi - logLo) : 0;
+                ctx.fillStyle = heatColor(t);
+                ctx.fillRect(padding + px, padding + py, step, step);
+            }
+        }
+
+        // Load data and render everything
+        fetch('points.json')
+            .then(res => res.json())
+            .then(data => {
+                const { function: funcExpr, points } = data;
+
+                // Build the function from the expression string
+                const fn = new Function('x', 'y', 'return ' + funcExpr);
+
+                // Draw heatmap first (background)
+                drawHeatmap(fn);
+
+                // Grid and axes on top
+                drawGrid();
+                drawAxes();
+
+                // Draw connecting line
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                for (let i = 0; i < points.length; i++) {
+                    const [x, y] = points[i];
+                    if (i === 0) ctx.moveTo(toX(x), toY(y));
+                    else ctx.lineTo(toX(x), toY(y));
+                }
+                ctx.stroke();
+
+                // Draw each point
+                for (let i = 0; i < points.length; i++) {
+                    const [x, y] = points[i];
+                    ctx.fillStyle = '#fff';
+                    ctx.beginPath();
+                    ctx.arc(toX(x), toY(y), 2, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            });
+    </script>
+</body>
+</html>

@@ -13,50 +13,52 @@ int SpringRiverSystem::worldToRegion(int worldTile) {
 }
 
 bool SpringRiverSystem::isRegionGenerated(int worldTileX, int worldTileY) const {
+    std::shared_lock lock(regionMutex);
     int rx = worldToRegion(worldTileX);
     int ry = worldToRegion(worldTileY);
     return regions.count(regionKey(rx, ry)) > 0;
 }
 
-bool SpringRiverSystem::isRiver(int worldTileX, int worldTileY) const {
+const SpringRiverSystem::Region* SpringRiverSystem::findRegionTile(
+        int worldTileX, int worldTileY, int& index) const {
     int rx = worldToRegion(worldTileX);
     int ry = worldToRegion(worldTileY);
     auto it = regions.find(regionKey(rx, ry));
-    if (it == regions.end()) return false;
-
+    if (it == regions.end()) return nullptr;
     int lx = worldTileX - rx * RIVER_REGION_SIZE;
     int ly = worldTileY - ry * RIVER_REGION_SIZE;
-    int i = ly * RIVER_REGION_SIZE + lx;
-    return it->second.river[i];
+    index = ly * RIVER_REGION_SIZE + lx;
+    return &it->second;
+}
+
+bool SpringRiverSystem::isRiver(int worldTileX, int worldTileY) const {
+    std::shared_lock lock(regionMutex);
+    int i;
+    const Region* r = findRegionTile(worldTileX, worldTileY, i);
+    return r ? r->river[i] : false;
 }
 
 bool SpringRiverSystem::isBank(int worldTileX, int worldTileY) const {
-    int rx = worldToRegion(worldTileX);
-    int ry = worldToRegion(worldTileY);
-    auto it = regions.find(regionKey(rx, ry));
-    if (it == regions.end()) return false;
-
-    int lx = worldTileX - rx * RIVER_REGION_SIZE;
-    int ly = worldTileY - ry * RIVER_REGION_SIZE;
-    int i = ly * RIVER_REGION_SIZE + lx;
-    return it->second.bank[i];
+    std::shared_lock lock(regionMutex);
+    int i;
+    const Region* r = findRegionTile(worldTileX, worldTileY, i);
+    return r ? r->bank[i] : false;
 }
 
 int SpringRiverSystem::getFlow(int worldTileX, int worldTileY) const {
-    int rx = worldToRegion(worldTileX);
-    int ry = worldToRegion(worldTileY);
-    auto it = regions.find(regionKey(rx, ry));
-    if (it == regions.end()) return 0;
-
-    int lx = worldTileX - rx * RIVER_REGION_SIZE;
-    int ly = worldTileY - ry * RIVER_REGION_SIZE;
-    int i = ly * RIVER_REGION_SIZE + lx;
-    return it->second.flow[i];
+    std::shared_lock lock(regionMutex);
+    int i;
+    const Region* r = findRegionTile(worldTileX, worldTileY, i);
+    return r ? r->flow[i] : 0;
 }
 
 void SpringRiverSystem::generateRegion(int regionX, int regionY, FastNoiseLite& elevationNoise) {
-    // Already generated?
-    if (regions.count(regionKey(regionX, regionY))) return;
+    // Already generated? (check under shared lock)
+    {
+        std::shared_lock lock(regionMutex);
+        if (regions.count(regionKey(regionX, regionY))) return;
+    }
+    // Heavy computation below runs without any lock held
 
     // The region covers world tiles [regionX*512, regionX*512+511] x [regionY*512, regionY*512+511]
     // We sample a padded area for river tracing: 256 tiles of padding on each side
@@ -69,7 +71,7 @@ void SpringRiverSystem::generateRegion(int regionX, int regionY, FastNoiseLite& 
     std::vector<float> elevation(sampleTotal);
 
     // Local indexing for the sample grid
-    auto sIdx = [](int sx, int sy) { return sy * RIVER_SAMPLE_SIZE + sx; };
+    auto sampleIndex = [](int sx, int sy) { return sy * RIVER_SAMPLE_SIZE + sx; };
 
     const float noiseOffset = NOISE_OFFSET;
     const int dx4[] = {-1, 1, 0, 0};
@@ -82,7 +84,7 @@ void SpringRiverSystem::generateRegion(int regionX, int regionY, FastNoiseLite& 
         for (int sx = 0; sx < RIVER_SAMPLE_SIZE; sx++) {
             float worldX = (float)(sampleOriginX + sx) + noiseOffset;
             float worldY = (float)(sampleOriginY + sy) + noiseOffset;
-            elevation[sIdx(sx, sy)] = (elevationNoise.GetNoise(worldX, worldY) + 1.0f) / 2.0f;
+            elevation[sampleIndex(sx, sy)] = (elevationNoise.GetNoise(worldX, worldY) + 1.0f) / 2.0f;
         }
     }
 
@@ -110,7 +112,7 @@ void SpringRiverSystem::generateRegion(int regionX, int regionY, FastNoiseLite& 
             float springVal = (springNoise.GetNoise(worldX, worldY) + 1.0f) / 2.0f;
 
             if (springVal < SPRING_THRESHOLD) continue;
-            if (elevation[sIdx(sx, sy)] < MIN_SPRING_ELEVATION) continue;
+            if (elevation[sampleIndex(sx, sy)] < MIN_SPRING_ELEVATION) continue;
 
             // Local maximum check
             bool isLocalMax = true;
@@ -151,7 +153,7 @@ void SpringRiverSystem::generateRegion(int regionX, int regionY, FastNoiseLite& 
         bool reachedWater = false;
 
         while ((int)path.size() < MAX_RIVER_LENGTH) {
-            int ci = sIdx(cx, cy);
+            int ci = sampleIndex(cx, cy);
 
             if (elevation[ci] < WATER_THRESHOLD) {
                 reachedWater = true;
@@ -173,7 +175,7 @@ void SpringRiverSystem::generateRegion(int regionX, int regionY, FastNoiseLite& 
                 int ny = cy + dy4[d];
                 if (nx < border || nx >= RIVER_SAMPLE_SIZE - border ||
                     ny < border || ny >= RIVER_SAMPLE_SIZE - border) continue;
-                float ne = elevation[sIdx(nx, ny)];
+                float ne = elevation[sampleIndex(nx, ny)];
                 if (ne < lowestElev) {
                     lowestElev = ne;
                     bestNx = nx;
@@ -204,7 +206,7 @@ void SpringRiverSystem::generateRegion(int regionX, int regionY, FastNoiseLite& 
                         int ny = by + dy4[d];
                         if (nx < border || nx >= RIVER_SAMPLE_SIZE - border ||
                             ny < border || ny >= RIVER_SAMPLE_SIZE - border) continue;
-                        int ni = sIdx(nx, ny);
+                        int ni = sampleIndex(nx, ny);
                         if (bfsParent[ni] >= 0) continue;
 
                         bfsParent[ni] = bi;
@@ -268,7 +270,7 @@ void SpringRiverSystem::generateRegion(int regionX, int regionY, FastNoiseLite& 
     std::vector<bool> widened = sampleRiver;
     for (int sy = border; sy < RIVER_SAMPLE_SIZE - border; sy++) {
         for (int sx = border; sx < RIVER_SAMPLE_SIZE - border; sx++) {
-            int i = sIdx(sx, sy);
+            int i = sampleIndex(sx, sy);
             if (!sampleRiver[i]) continue;
 
             int dist = sampleFlow[i];
@@ -282,7 +284,7 @@ void SpringRiverSystem::generateRegion(int regionX, int regionY, FastNoiseLite& 
                     int nx = sx + dx;
                     int ny = sy + dy;
                     if (nx < 0 || nx >= RIVER_SAMPLE_SIZE || ny < 0 || ny >= RIVER_SAMPLE_SIZE) continue;
-                    int ni = sIdx(nx, ny);
+                    int ni = sampleIndex(nx, ny);
                     if (elevation[ni] > DEEP_WATER_THRESHOLD) {
                         widened[ni] = true;
                     }
@@ -296,13 +298,13 @@ void SpringRiverSystem::generateRegion(int regionX, int regionY, FastNoiseLite& 
     std::vector<bool> sampleBank(sampleTotal, false);
     for (int sy = 1; sy < RIVER_SAMPLE_SIZE - 1; sy++) {
         for (int sx = 1; sx < RIVER_SAMPLE_SIZE - 1; sx++) {
-            int i = sIdx(sx, sy);
+            int i = sampleIndex(sx, sy);
             if (sampleRiver[i]) continue;
             if (elevation[i] < SAND_THRESHOLD) continue;
             if (elevation[i] > 0.85f) continue;
 
             for (int d = 0; d < 8; d++) {
-                int ni = sIdx(sx + dx8[d], sy + dy8[d]);
+                int ni = sampleIndex(sx + dx8[d], sy + dy8[d]);
                 if (sampleRiver[ni]) {
                     sampleBank[i] = true;
                     break;
@@ -322,7 +324,7 @@ void SpringRiverSystem::generateRegion(int regionX, int regionY, FastNoiseLite& 
         for (int lx = 0; lx < RIVER_REGION_SIZE; lx++) {
             int sx = lx + RIVER_REGION_PADDING;
             int sy = ly + RIVER_REGION_PADDING;
-            int si = sIdx(sx, sy);
+            int si = sampleIndex(sx, sy);
             int ri = ly * RIVER_REGION_SIZE + lx;
             region.river[ri] = sampleRiver[si];
             region.bank[ri] = sampleBank[si];
@@ -332,12 +334,12 @@ void SpringRiverSystem::generateRegion(int regionX, int regionY, FastNoiseLite& 
 
     // ---- Remove river blobs that touch the region edge ----
     // These are rivers that got cut off at the boundary and look broken.
-    auto rIdx = [](int x, int y) { return y * RIVER_REGION_SIZE + x; };
+    auto regionIndex = [](int x, int y) { return y * RIVER_REGION_SIZE + x; };
     std::vector<bool> visited(regionTotal, false);
 
     for (int ly = 0; ly < RIVER_REGION_SIZE; ly++) {
         for (int lx = 0; lx < RIVER_REGION_SIZE; lx++) {
-            int ri = rIdx(lx, ly);
+            int ri = regionIndex(lx, ly);
             if (!region.river[ri] || visited[ri]) continue;
 
             // BFS to find the connected blob
@@ -364,7 +366,7 @@ void SpringRiverSystem::generateRegion(int regionX, int regionY, FastNoiseLite& 
                     int nx = cx + dx4[d];
                     int ny = cy + dy4[d];
                     if (nx < 0 || nx >= RIVER_REGION_SIZE || ny < 0 || ny >= RIVER_REGION_SIZE) continue;
-                    int ni = rIdx(nx, ny);
+                    int ni = regionIndex(nx, ny);
                     if (!region.river[ni] || visited[ni]) continue;
                     visited[ni] = true;
                     q.push(ni);
@@ -385,7 +387,7 @@ void SpringRiverSystem::generateRegion(int regionX, int regionY, FastNoiseLite& 
                         int nx = bx + dx8[d];
                         int ny = by + dy8[d];
                         if (nx < 0 || nx >= RIVER_REGION_SIZE || ny < 0 || ny >= RIVER_REGION_SIZE) continue;
-                        int ni = rIdx(nx, ny);
+                        int ni = regionIndex(nx, ny);
                         if (region.bank[ni]) region.bank[ni] = false;
                     }
                 }
@@ -393,7 +395,10 @@ void SpringRiverSystem::generateRegion(int regionX, int regionY, FastNoiseLite& 
         }
     }
 
-    regions[regionKey(regionX, regionY)] = std::move(region);
+    {
+        std::unique_lock lock(regionMutex);
+        regions[regionKey(regionX, regionY)] = std::move(region);
+    }
     printf("RIVERS: Region (%d, %d) — %d springs, %d rivers kept, %d discarded\n",
            regionX, regionY, (int)springs.size(), convergentCount, discardedCount);
     fflush(stdout);

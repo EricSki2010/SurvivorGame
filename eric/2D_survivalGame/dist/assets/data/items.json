@@ -1,0 +1,8 @@
+[
+    {
+        "id": 0,
+        "name": "wood",
+        "maxStack": 64,
+        "texture": "assets/items/wood.png"
+    }
+]

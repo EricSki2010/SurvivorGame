@@ -6,10 +6,11 @@
 #include <unordered_map>
 #include <vector>
 #include <cstdint>
+#include <future>
 
 const int TILE_SIZE = 32;
 const int DEFAULT_RENDER_DISTANCE = 2;
-const int WorldSeed = 58;
+inline int WorldSeed = 58;
 
 // Noise origin offset to avoid Perlin symmetry artifacts near (0,0)
 const float NOISE_OFFSET = 10000.0f;
@@ -48,8 +49,8 @@ public:
     int tileVariants[TILE_COUNT];       // how many variants per tile type
     int tileAtlasCols[TILE_COUNT];      // columns in spritesheet (derived from texture width)
     float tileAnimSpeed[TILE_COUNT];    // seconds per frame (0 = static)
-    Texture2D objectTextures[OBJECT_COUNT] = {};
-    bool objectTexturesLoaded[OBJECT_COUNT] = {};
+    std::vector<Texture2D> objectTextures;
+    std::vector<bool> objectTexturesLoaded;
     // Water transition piece: a small image drawn at an offset within a water tile
     struct WaterPiece {
         Texture2D tex = {};
@@ -59,10 +60,25 @@ public:
 
         void load(const char* path, int w, int h) {
             tex = LoadTexture(path);
-            pieceW = w;
-            pieceH = h;
-            variants = (tex.id > 0) ? tex.height / h : 0;
-            loaded = (tex.id > 0 && variants > 0);
+            if (tex.id > 0) {
+                if (tex.height >= h) {
+                    // Normal: image has one or more variants stacked vertically
+                    pieceW = w;
+                    pieceH = h;
+                    variants = tex.height / h;
+                } else {
+                    // Image smaller than expected piece size — use actual dimensions as one variant
+                    pieceW = tex.width;
+                    pieceH = tex.height;
+                    variants = 1;
+                }
+                loaded = (variants > 0);
+            } else {
+                pieceW = w;
+                pieceH = h;
+                variants = 0;
+                loaded = false;
+            }
         }
         void unload() { if (loaded) { UnloadTexture(tex); loaded = false; } }
 
@@ -92,18 +108,15 @@ public:
 
     // Water transition pieces — indexed by enum below
     enum WaterPieceId {
-        WP_EDGE,          // single edge (land on one cardinal side)
-        WP_CORNER_NE,     // corner (land on N+E)
-        WP_CORNER_NW,
-        WP_CORNER_SE,
-        WP_CORNER_SW,
-        WP_EDGE_WE,       // opposite edges (land on W+E)
-        WP_INNER_CORNER,  // inner corner (land diagonal only)
+        WP_STRAIGHT,      // straight edge (16x16, rotated per direction)
+        WP_TURN,          // outer corner/turn (32x32, rotated per direction)
+        WP_CORNER,        // inner corner (16x16, rotated per direction)
         WP_COUNT
     };
     WaterPiece waterPieces[WP_COUNT];
     bool waterTransitionsLoaded = false;
     bool texturesLoaded = false;
+    bool drawChunkBorders = true;
     float animTimer = 0.0f;
     int renderDistance = DEFAULT_RENDER_DISTANCE;
 
@@ -122,11 +135,37 @@ public:
     int getLoadedChunkCount();
     FlowDir getFlowDir(int worldTileX, int worldTileY);
     bool isWaterTile(int worldTileX, int worldTileY);
+    bool isWaterAt(int worldTileX, int worldTileY); // like isWaterTile but uses noise fallback for unloaded chunks
+    void computeWaterStyles(int cx, int cy);
 
-    // River region on-demand generation
-    // Returns true if a new region was generated (caller should show loading screen)
-    bool checkRiverGeneration(Vector2 playerPos);
+    // Remove the object on a tile. Returns the objectId that was removed (OBJECT_NONE if empty).
+    // If dropLoot is true, the caller should use the returned id to roll loot.
+    int removeObject(int worldTileX, int worldTileY, bool dropLoot);
+
+    // Async river region generation
+    struct PendingRiver {
+        int regionX, regionY;
+        std::future<void> future;
+    };
+    std::vector<PendingRiver> pendingRivers;
+
+    void dispatchRiverGeneration(Vector2 playerPos);
+    void integrateReadyRivers();
     void invalidateChunksInRegion(int regionX, int regionY);
+
+    // --- Async chunk generation ---
+    // Each pending entry holds a future that produces a Chunk on a worker thread.
+    // The main thread polls these each frame and inserts completed chunks.
+    struct PendingChunk {
+        int64_t key;
+        int cx, cy;
+        std::future<Chunk> future;
+    };
+    std::vector<PendingChunk> pendingChunks;
+    static const int MAX_PENDING_CHUNKS = 8;
+
+    void integrateReadyChunks();
+    void waitForPendingChunks();
 
 private:
     void loadChunk(int cx, int cy);

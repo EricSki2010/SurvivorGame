@@ -1,0 +1,42 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(make:*)",
+      "Bash(gdb:*)",
+      "Bash(g++:*)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(curl:*)",
+      "Bash(pacman:*)",
+      "Bash(pkg-config:*)",
+      "Bash(/c/msys64/mingw64/bin/pkg-config --static --libs raylib)",
+      "Bash(ls:*)",
+      "Bash(mingw32-make run:*)",
+      "Bash(/c/msys64/mingw64/bin/mingw32-make.exe clean:*)",
+      "Bash(/c/msys64/mingw64/bin/mingw32-make.exe:*)",
+      "Bash(/c/msys64/mingw64/bin/ldd.exe:*)",
+      "Bash(/c/msys64/usr/bin/ldd.exe:*)",
+      "Bash(winget install --id MSYS2.MSYS2 --accept-package-agreements --accept-source-agreements)",
+      "Bash(/c/msys64/usr/bin/pacman.exe -S --noconfirm mingw-w64-x86_64-gcc mingw-w64-x86_64-make)",
+      "Bash(/c/msys64/usr/bin/pacman.exe -S --noconfirm mingw-w64-x86_64-raylib)",
+      "Bash(where cl.exe)",
+      "Bash(where msbuild.exe)",
+      "Bash(cmake --version)",
+      "Bash(winget list)",
+      "Bash(where cmake)",
+      "Bash(winget install Microsoft.VisualStudio.2022.BuildTools --accept-package-agreements --accept-source-agreements)",
+      "Bash(\"C:/Program Files \\(x86\\)/Microsoft Visual Studio/Installer/vs_installer.exe\" modify --installPath \"C:/Program Files \\(x86\\)/Microsoft Visual Studio/2022/BuildTools\" --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --passive --norestart)",
+      "Bash(\"/c/Program Files \\(x86\\)/Microsoft Visual Studio/Installer/vswhere.exe\" -all -format json)",
+      "Bash(\"/c/Program Files \\(x86\\)/Microsoft Visual Studio/Installer/vs_installer.exe\" modify --installPath \"C:/Program Files/Microsoft Visual Studio/2022/BuildTools\" --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --passive --norestart)",
+      "Bash(\"/c/Program Files \\(x86\\)/Microsoft Visual Studio/Installer/setup.exe\" modify --installPath \"C:/Program Files/Microsoft Visual Studio/2022/BuildTools\" --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --quiet --wait --norestart)",
+      "Bash(\"/c/Program Files \\(x86\\)/Microsoft Visual Studio/Installer/setup.exe\" modify --installPath \"C:/Program Files/Microsoft Visual Studio/2022/BuildTools\" --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --quiet --norestart)",
+      "Bash(powershell -Command \"Start-Process -FilePath ''C:/Program Files \\(x86\\)/Microsoft Visual Studio/Installer/setup.exe'' -ArgumentList ''modify --installPath \"\"C:/Program Files/Microsoft Visual Studio/2022/BuildTools\"\" --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --passive --norestart'' -Verb RunAs -Wait\")",
+      "Bash(\"/c/Program Files \\(x86\\)/Microsoft Visual Studio/Installer/vswhere.exe\" -latest -property installationPath)",
+      "Bash(\"/c/Program Files \\(x86\\)/Microsoft Visual Studio/Installer/vswhere.exe\" -all -products '*' -format json)",
+      "Bash(\"/c/Program Files \\(x86\\)/Microsoft Visual Studio/Installer/vswhere.exe\" -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath)",
+      "Bash(powershell -Command \"Get-Process -Name ''setup'',''vs_installer'',''vs_installershell'' -ErrorAction SilentlyContinue | Select-Object Name,Id,StartTime\")",
+      "Bash(git clone https://github.com/microsoft/vcpkg.git /c/vcpkg)",
+      "Bash(/c/vcpkg/bootstrap-vcpkg.bat)",
+      "Bash(/c/vcpkg/vcpkg.exe install raylib:x64-windows-static)"
+    ]
+  }
+}

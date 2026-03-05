@@ -1,7 +1,15 @@
 #include "chunk.h"
 #include "world.h"
+#include "game_data.h"
 #include "spring_river_system.h"
-#include <random>
+
+static uint32_t tileHash(uint32_t seed, int x, int y, uint32_t slot) {
+    uint32_t h = seed ^ ((uint32_t)x * 374761393u) ^ ((uint32_t)y * 668265263u) ^ (slot * 1234567891u);
+    h ^= h >> 16;
+    h *= 0x45d9f3bu;
+    h ^= h >> 16;
+    return h;
+}
 
 Chunk::Chunk() : chunkX(0), chunkY(0) {}
 
@@ -34,36 +42,34 @@ Chunk::Chunk(int cx, int cy, FastNoiseLite& elevationNoise, FastNoiseLite& moist
         }
     }
 
-    // Object placement pass — deterministic seeded RNG per chunk
-    uint32_t chunkSeed = (uint32_t)(WorldSeed ^ (cx * 374761393) ^ (cy * 668265263));
-    std::mt19937 rng(chunkSeed);
-    std::uniform_int_distribution<int> chance(0, 99);
-
+    // Object placement pass — deterministic hash per tile
     for (int y = 0; y < CHUNK_SIZE; y++) {
         for (int x = 0; x < CHUNK_SIZE; x++) {
+            int worldTileX = chunkX * CHUNK_SIZE + x;
+            int worldTileY = chunkY * CHUNK_SIZE + y;
             int tileId = tiles[y][x].id;
-            int roll = chance(rng);
+            int roll = (int)(tileHash(WorldSeed, worldTileX, worldTileY, 0) % 100); // slot 0 — spawn chance
 
             // Sum weights of all matching rules for this tile
             int totalWeight = 0;
-            for (int r = 0; r < SPAWN_RULE_COUNT; r++) {
-                if (SPAWN_RULES[r].tileId == tileId) totalWeight += SPAWN_RULES[r].weight;
+            for (int r = 0; r < gData().spawnRuleCount; r++) {
+                if (gData().spawnRules[r].tileId == tileId) totalWeight += gData().spawnRules[r].weight;
             }
             if (roll >= totalWeight) continue; // no object
 
             // Pick from the weighted list
             int acc = 0;
-            for (int r = 0; r < SPAWN_RULE_COUNT; r++) {
-                if (SPAWN_RULES[r].tileId != tileId) continue;
-                acc += SPAWN_RULES[r].weight;
+            for (int r = 0; r < gData().spawnRuleCount; r++) {
+                if (gData().spawnRules[r].tileId != tileId) continue;
+                acc += gData().spawnRules[r].weight;
                 if (roll < acc) {
-                    int objId = SPAWN_RULES[r].objectId;
+                    int objId = gData().spawnRules[r].objectId;
                     tiles[y][x].objectId = objId;
-                    int jitter = getSpawnJitter(objId);
+                    int jitter = gData().getSpawnJitter(objId);
                     if (jitter > 0) {
-                        std::uniform_int_distribution<int> jitterDist(-jitter, jitter);
-                        tiles[y][x].offsetX = (float)jitterDist(rng);
-                        tiles[y][x].offsetY = (float)jitterDist(rng);
+                        int range = 2 * jitter + 1;
+                        tiles[y][x].offsetX = (float)((int)(tileHash(WorldSeed, worldTileX, worldTileY, 1) % range) - jitter); // slot 1 — jitter X
+                        tiles[y][x].offsetY = (float)((int)(tileHash(WorldSeed, worldTileX, worldTileY, 2) % range) - jitter); // slot 2 — jitter Y
                     }
                     break;
                 }

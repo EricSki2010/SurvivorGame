@@ -15,6 +15,7 @@ target_include_directories(game PRIVATE
     src/world
     src/world/terrain
     src/world/rivers
+    src/third_party
 )
 
 find_package(raylib CONFIG REQUIRED)

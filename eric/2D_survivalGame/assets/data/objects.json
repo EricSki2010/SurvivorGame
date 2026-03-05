@@ -1,0 +1,26 @@
+[
+    {
+        "id": 0,
+        "name": "none",
+        "health": 0,
+        "collisionWidth": 0,
+        "collisionHeight": 0,
+        "texture": ""
+    },
+    {
+        "id": 1,
+        "name": "rock",
+        "health": 50,
+        "collisionWidth": 14,
+        "collisionHeight": 12,
+        "texture": "assets/objects/rocks/rock.png"
+    },
+    {
+        "id": 2,
+        "name": "tree",
+        "health": 80,
+        "collisionWidth": 11,
+        "collisionHeight": 12,
+        "texture": "assets/objects/trees/Pine_Tree.png"
+    }
+]
